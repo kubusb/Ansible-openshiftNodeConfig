@@ -1,0 +1,116 @@
+# Infra tests playbook.
+
+- name: Allow root to login
+  hosts: all
+  vars:
+      root_deploy_authorized_keys: 'ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDJ0xiqfcq+DL8wPL3jo82zkaKI4pzKyxrzwd2KYG4EfJhmS7ILwdgiyUX/KSVRYEUKgW6m4mVNffIX+K4XA2SU1PWyoi7UEO6UX/AaID/0hpnU9EFUvIDw+n1H8RFYUySDOgjPNqypY3FuKjJ071OA/WHkNOyY27bBEHM2TBpKy00KnJn0r9DAGK1JYQesx21BKBKjHrvyebPGmEyeYPlN5eda5xjHBUS2rSamrtcfYkmrthZWO7n20kp3EbW6ndNmXgTUaYWfjyrX/nwSnpT0S4pdXQSUiDPsFIK+IOlDbEUucVYmxgRYf5UkY1V42z/8/rlPog9lPc6r0k53MtyF root@master2'
+  tasks:
+      #Let's make sure SSH allows root to login using key only.
+      - name: Change ssh configuration
+        lineinfile: dest=/etc/ssh/sshd_config
+                    regexp="^PermitRootLogin"
+                    line="PermitRootLogin without-password"
+                    state=present
+        become: yes
+
+      - name: Restart SSHD service
+        service:
+          name: 'sshd'
+          state: 'restarted'
+        become: yes
+
+      #Let's make sure the key is there.
+      -  name: Key deployment
+         authorized_key:
+             user: root
+             state: present
+             key: "{{ root_deploy_authorized_keys }}"
+         become: yes
+
+- name: Let's install required software
+  hosts: all
+  tasks:
+      #Let's create PV and VG.
+      - name: Install required software.
+        yum:
+            name: "{{ item }}"
+            state: latest
+            enablerepo: epel
+        with_items:
+            - device-mapper-persistent-data
+            - lvm2
+            - ansible
+            - git
+            - mlocate
+            - vim
+            - docker
+        become: yes
+
+- name: Let's allow access to insecure registry and push other config files.
+  hosts: all
+  tasks:
+      - name: Allow access to insecure registry
+        replace:
+            path: /etc/sysconfig/docker
+            regexp: "^OPTIONS='"
+            replace: "OPTIONS='--insecure-registry 172.30.0.0/16 "
+        become: yes
+
+      - name: Add thinpool profile
+        copy:
+            src: docker-thinpool.profile
+            dest: /etc/lvm/profile/docker-thinpool.profile
+        become: yes
+
+      - name: Add deamon json
+        copy:
+            src: daemon.json
+            dest: /etc/docker/daemon.json
+        become: yes
+
+- name: Configure Docker block storage ##THIS IS POTENTIALY DESTRUCTIVE! PLEASE BE CAREFUL ##
+  hosts: all
+  vars:
+      disk_dev: '/dev/sdb'
+  tasks:
+      #Let's create PV and VG.
+      - name: Create VG docker on "{{ disk_dev }}"
+        lvg:
+            vg: docker
+            pvs: "{{ disk_dev }}"
+            state: present
+        become: yes
+      #Let's create LV, format it and monitor
+      - name: pushing LV thinpool data
+        lvol:
+            vg: docker
+            lv: thinpool
+            state: present
+            size: 95%VG
+            opts: --wipesignatures y
+            force: yes
+        become: yes
+      - name: pushing LV thinpoolmeta data
+        lvol:
+            vg: docker
+            lv: thinpoolmeta
+            state: present
+            size: 1%VG
+            opts: --wipesignatures y
+            force: yes
+        become: true
+      - name: Finish LVM configuration 1
+        raw: lvconvert -y --zero n -c 512K --thinpool docker/thinpool --poolmetadata docker/thinpoolmeta; lvchange --metadataprofile docker-thinpool docker/thinpool; lvs -o+seg_monitor
+        ignore_errors: yes
+        become: yes
+
+      - name: Pase before Docker service
+        pause:
+          seconds: 15
+
+      - name: Start Docker service
+        service:
+          name: docker
+          state: started
+          enabled: yes
+        become: yes
