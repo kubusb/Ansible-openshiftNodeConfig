@@ -73,7 +73,7 @@
   vars:
       disk_dev: '/dev/sdb'
   tasks:
-      #Let's create PV and VG.
+      #Let's create PV and VG.git@github.com:kubusb/Ansible-openshiftNodeConfig.git
       - name: Create VG docker on "{{ disk_dev }}"
         lvg:
             vg: docker
@@ -104,7 +104,7 @@
         ignore_errors: yes
         become: yes
 
-      - name: Pase before Docker service
+      - name: Pause before Docker service
         pause:
           seconds: 15
 
