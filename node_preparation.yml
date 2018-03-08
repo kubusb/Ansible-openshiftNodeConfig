@@ -49,12 +49,17 @@
 - name: Let's allow access to insecure registry and push other config files.
   hosts: all
   tasks:
-      - name: Allow access to insecure registry
+      - shell: cat /etc/sysconfig/docker
+        register: docker_output
+
+      - name: Allow access to insecure registry if it's not already there.
         replace:
             path: /etc/sysconfig/docker
             regexp: "^OPTIONS='"
             replace: "OPTIONS='--insecure-registry 172.30.0.0/16 "
         become: yes
+        when: docker_output.stdout.find("172.30.0.0/16") == -1
+
 
       - name: Add thinpool profile
         copy:
@@ -111,6 +116,6 @@
       - name: Start Docker service
         service:
           name: docker
-          state: started
+          state: restarted
           enabled: yes
         become: yes
