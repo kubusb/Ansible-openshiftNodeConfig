@@ -109,6 +109,18 @@
         ignore_errors: yes
         become: yes
 
+      - name: Remove conflicting docker storage setup files
+        file:
+          path: /etc/sysconfig/docker-storage-setup
+          state: absent
+        become: yes
+
+      - name: Remove conflicting docker storage file
+        file:
+          path: /etc/sysconfig/docker-storage
+          state: absent
+        become: yes
+
       - name: Pause before Docker service
         pause:
           seconds: 15
