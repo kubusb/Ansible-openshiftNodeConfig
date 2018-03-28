@@ -44,6 +44,7 @@
             - mlocate
             - vim
             - docker
+            - screen
         become: yes
 
 - name: Let's allow access to insecure registry and push other config files.
@@ -105,7 +106,10 @@
             force: yes
         become: true
       - name: Finish LVM configuration 1
-        raw: lvconvert -y --zero n -c 512K --thinpool docker/thinpool --poolmetadata docker/thinpoolmeta; lvchange --metadataprofile docker-thinpool docker/thinpool; lvs -o+seg_monitor
+        raw: >
+          lvconvert -y --zero n -c 512K --thinpool docker/thinpool --poolmetadata docker/thinpoolmeta;
+          lvchange --metadataprofile docker-thinpool docker/thinpool;
+          lvs -o+seg_monitor
         ignore_errors: yes
         become: yes
 
